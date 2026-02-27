@@ -1,0 +1,34 @@
+diff --git a/components/browser_ui/photo_picker/android/features.cc b/components/browser_ui/photo_picker/android/features.cc
+index 73432f86e8949..97671c53d6ec2 100644
+--- a/components/browser_ui/photo_picker/android/features.cc
++++ b/components/browser_ui/photo_picker/android/features.cc
+@@ -10,11 +10,29 @@
+ #include "components/browser_ui/photo_picker/android/photo_picker_jni_headers/PhotoPickerFeatures_jni.h"
+ 
+ namespace photo_picker {
++
+ namespace features {
+ 
+++ BASE_FEATURE(kAndroidMediaPickerRegression,
++
++               +"MediaPickerRegression",
++
++               +base::FEATURE_DISABLED_BY_DEFAULT);
++
+++
+ 
++    + static int64_t
++      JNI_PhotoPickerFeatures_GetAndroidMediaPickerRegressionFeature(
++          JNIEnv* env) {
++  +return reinterpret_cast<int64_t>(&kAndroidMediaPickerRegression);
++
++  +
++}
++
+++
+ 
+ }  // namespace features
++
+ }  // namespace photo_picker
+ 
+ DEFINE_JNI(PhotoPickerFeatures)
