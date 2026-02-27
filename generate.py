@@ -2,6 +2,46 @@ import os
 import json
 import html
 
+def format_patch(patch_text):
+    if not patch_text:
+        return ""
+
+    lines = patch_text.splitlines()
+    html_output = []
+
+    in_file = False
+
+    for line in lines:
+        if line.startswith('diff --git'):
+            if in_file:
+                html_output.append('</pre></div>')
+            html_output.append('<div class="patch-file">')
+            html_output.append(f'<div class="patch-header">{html.escape(line)}</div>')
+            html_output.append('<pre class="patch-content">')
+            in_file = True
+            continue
+
+        if not in_file:
+            html_output.append('<div class="patch-file">')
+            html_output.append('<pre class="patch-content">')
+            in_file = True
+
+        escaped_line = html.escape(line)
+        if line.startswith('+'):
+            html_output.append(f'<span class="patch-add">{escaped_line}</span>')
+        elif line.startswith('-'):
+            html_output.append(f'<span class="patch-del">{escaped_line}</span>')
+        elif line.startswith('@@'):
+            html_output.append(f'<span class="patch-hunk">{escaped_line}</span>')
+        else:
+            html_output.append(escaped_line)
+        html_output.append('\n')
+
+    if in_file:
+        html_output.append('</pre></div>')
+
+    return "".join(html_output)
+
 def generate_html():
     fuckups_dir = 'fuckups'
     fuckups = []
@@ -125,6 +165,52 @@ def generate_html():
             font-size: 0.9em;
             margin: 0;
         }
+        .prompt-text {
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .patch-file {
+            margin-top: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #282c34;
+        }
+        .patch-header {
+            background-color: #3e4451;
+            color: #abb2bf;
+            padding: 8px 15px;
+            font-family: monospace;
+            font-size: 0.85em;
+            border-bottom: 1px solid #181a1f;
+        }
+        .patch-content {
+            margin: 0;
+            border-radius: 0;
+            padding: 10px 15px;
+        }
+        .patch-add {
+            display: block;
+            background-color: #1e3a1e;
+            color: #aff0b5;
+            padding: 0 5px;
+            margin: 0 -5px;
+        }
+        .patch-del {
+            display: block;
+            background-color: #442121;
+            color: #ffdce0;
+            padding: 0 5px;
+            margin: 0 -5px;
+        }
+        .patch-hunk {
+            display: block;
+            color: #d1d5da;
+            background-color: #273444;
+            padding: 0 5px;
+            margin: 0 -5px;
+            font-weight: bold;
+        }
         .description {
             margin-top: 20px;
             padding: 15px;
@@ -151,10 +237,10 @@ def generate_html():
         </div>
 
         <span class="section-label">Prompt:</span>
-        <pre>{html.escape(f['prompt'])}</pre>
+        <pre class="prompt-text">{html.escape(f['prompt'])}</pre>
 
         <span class="section-label">Patch:</span>
-        <pre>{html.escape(f['patch'])}</pre>
+        {format_patch(f['patch'])}
 """
         if f['description']:
             html_content += f"""
