@@ -1,6 +1,7 @@
 import os
 import json
 import html
+import shlex
 
 def format_patch(patch_text):
     if not patch_text:
@@ -10,11 +11,29 @@ def format_patch(patch_text):
     html_output = []
 
     in_file = False
+    is_rename = False
 
     for line in lines:
         if line.startswith('diff --git'):
             if in_file:
                 html_output.append('</pre></div>')
+
+            # Detect rename
+            try:
+                parts = shlex.split(line)
+                if len(parts) >= 4:
+                    file_a = parts[2]
+                    file_b = parts[3]
+                    # Strip a/ and b/ prefixes
+                    if file_a.startswith('a/'): file_a = file_a[2:]
+                    if file_b.startswith('b/'): file_b = file_b[2:]
+                    # Ignore /dev/null for new/deleted files
+                    is_rename = (file_a != file_b) and (file_a != "/dev/null") and (file_b != "/dev/null")
+                else:
+                    is_rename = False
+            except:
+                is_rename = False
+
             html_output.append('<div class="patch-file">')
             html_output.append(f'<div class="patch-header">{html.escape(line)}</div>')
             html_output.append('<pre class="patch-content">')
@@ -26,16 +45,20 @@ def format_patch(patch_text):
             html_output.append('<pre class="patch-content">')
             in_file = True
 
+        # Handle header lines that should be hidden if not a rename
+        if not is_rename:
+            if line.startswith('index ') or line.startswith('--- ') or line.startswith('+++ '):
+                continue
+
         escaped_line = html.escape(line)
-        if line.startswith('+'):
+        if line.startswith('+') and not line.startswith('+++ '):
             html_output.append(f'<span class="patch-add">{escaped_line}</span>')
-        elif line.startswith('-'):
+        elif line.startswith('-') and not line.startswith('--- '):
             html_output.append(f'<span class="patch-del">{escaped_line}</span>')
         elif line.startswith('@@'):
             html_output.append(f'<span class="patch-hunk">{escaped_line}</span>')
         else:
-            html_output.append(escaped_line)
-        html_output.append('\n')
+            html_output.append(f'<span class="patch-normal">{escaped_line}</span>')
 
     if in_file:
         html_output.append('</pre></div>')
@@ -187,29 +210,30 @@ def generate_html():
         .patch-content {
             margin: 0;
             border-radius: 0;
-            padding: 10px 15px;
+            padding: 10px 0;
         }
         .patch-add {
             display: block;
             background-color: #1e3a1e;
             color: #aff0b5;
-            padding: 0 5px;
-            margin: 0 -5px;
+            padding: 0 15px;
         }
         .patch-del {
             display: block;
             background-color: #442121;
             color: #ffdce0;
-            padding: 0 5px;
-            margin: 0 -5px;
+            padding: 0 15px;
         }
         .patch-hunk {
             display: block;
             color: #d1d5da;
             background-color: #273444;
-            padding: 0 5px;
-            margin: 0 -5px;
+            padding: 0 15px;
             font-weight: bold;
+        }
+        .patch-normal {
+            display: block;
+            padding: 0 15px;
         }
         .description {
             margin-top: 20px;
