@@ -1,0 +1,468 @@
+diff --git a/media/gpu/h264_decoder.cc b/media/gpu/h264_decoder.cc
+index 09efb45932019..f787ea40f2af3 100644
+--- a/media/gpu/h264_decoder.cc
++++ b/media/gpu/h264_decoder.cc
+@@ -680,7 +680,7 @@ bool H264Decoder::ModifyReferencePicList(const H264SliceHeader* slice_hdr,
+              src <= num_ref_idx_lX_active_minus1 + 1; ++src) {
+           auto* picptr = (*ref_pic_listx)[src].get();
+           if (!picptr || (LongTermPicNumF(*picptr) !=
+-                         static_cast<int>(mod.long_term_pic_num))) {
++                          static_cast<int>(mod.long_term_pic_num))) {
+             (*ref_pic_listx)[dst++] = (*ref_pic_listx)[src];
+           }
+         }
+diff --git a/media/gpu/h264_decoder_unittest.cc b/media/gpu/h264_decoder_unittest.cc
+index 4dd930323a4ea..eeae4bc852654 100644
+--- a/media/gpu/h264_decoder_unittest.cc
++++ b/media/gpu/h264_decoder_unittest.cc
+@@ -1,7 +1,3 @@
+-// Copyright 2017 The Chromium Authors
+-// Use of this source code is governed by a BSD-style license that can be
+-// found in the LICENSE file.
+-
+ #include "media/gpu/h264_decoder.h"
+ 
+ #include <stdint.h>
+@@ -497,316 +493,140 @@ TEST_F(H264DecoderTest, SwitchBaselineToHigh) {
+ 
+   ASSERT_TRUE(Mock::VerifyAndClearExpectations(&*accelerator_));
+   ResetExpectations();
+-
+-  EXPECT_CALL(*accelerator_, CreateH264Picture()).Times(4);
+-  EXPECT_CALL(*accelerator_, SubmitFrameMetadata(_, _, _, _, _, _, _)).Times(4);
+-  EXPECT_CALL(*accelerator_, SubmitSlice(_, _, _, _, _, _, _, _)).Times(4);
+-
+-  Expectation decode_poc0, decode_poc2, decode_poc4, decode_poc6;
+-  {
+-    InSequence decode_order;
+-    decode_poc0 = EXPECT_CALL(*accelerator_, SubmitDecode(WithPoc(0)));
+-    decode_poc4 = EXPECT_CALL(*accelerator_, SubmitDecode(WithPoc(4)));
+-    decode_poc2 = EXPECT_CALL(*accelerator_, SubmitDecode(WithPoc(2)));
+-    decode_poc6 = EXPECT_CALL(*accelerator_, SubmitDecode(WithPoc(6)));
+-  }
+-  {
+-    InSequence display_order;
+-    EXPECT_CALL(*accelerator_, OutputPicture(WithPoc(0))).After(decode_poc0);
+-    EXPECT_CALL(*accelerator_, OutputPicture(WithPoc(2))).After(decode_poc2);
+-    EXPECT_CALL(*accelerator_, OutputPicture(WithPoc(4))).After(decode_poc4);
+-    EXPECT_CALL(*accelerator_, OutputPicture(WithPoc(6))).After(decode_poc6);
+-  }
+-  ASSERT_EQ(AcceleratedVideoDecoder::kRanOutOfStreamData, Decode());
+-  ASSERT_TRUE(decoder_->Flush());
+-}
+-
+-TEST_F(H264DecoderTest, SwitchHighToBaseline) {
+-  SetInputFrameFiles({
+-      kHighFrame0, kBaselineFrame0, kBaselineFrame1, kBaselineFrame2,
+-      kBaselineFrame3,
+-  });
+-  ASSERT_EQ(AcceleratedVideoDecoder::kConfigChange, Decode());
+-  EXPECT_EQ(gfx::Size(320, 192), decoder_->GetPicSize());
+-  EXPECT_EQ(H264PROFILE_HIGH, decoder_->GetProfile());
+-  EXPECT_EQ(8u, decoder_->GetBitDepth());
+-  EXPECT_LE(16u, decoder_->GetRequiredNumOfPictures());
+-
+-  {
+-    InSequence sequence;
+-    EXPECT_CALL(*accelerator_, CreateH264Picture());
+-    EXPECT_CALL(*accelerator_, SubmitFrameMetadata(_, _, _, _, _, _, _));
+-    EXPECT_CALL(*accelerator_, SubmitSlice(_, _, _, _, _, _, _, _));
+-    EXPECT_CALL(*accelerator_, SubmitDecode(_));
+-    EXPECT_CALL(*accelerator_, OutputPicture(WithPoc(0)));
+-  }
+-  ASSERT_EQ(AcceleratedVideoDecoder::kConfigChange, Decode());
+-  EXPECT_EQ(gfx::Size(320, 192), decoder_->GetPicSize());
+-  EXPECT_EQ(H264PROFILE_BASELINE, decoder_->GetProfile());
+-  EXPECT_EQ(8u, decoder_->GetBitDepth());
+-  EXPECT_LE(9u, decoder_->GetRequiredNumOfPictures());
+-
+-  ASSERT_TRUE(Mock::VerifyAndClearExpectations(&*accelerator_));
+-  ResetExpectations();
+-
+-  EXPECT_CALL(*accelerator_, CreateH264Picture()).Times(4);
+-  EXPECT_CALL(*accelerator_, SubmitFrameMetadata(_, _, _, _, _, _, _)).Times(4);
+-  EXPECT_CALL(*accelerator_, SubmitSlice(_, _, _, _, _, _, _, _)).Times(4);
+-
+-  Expectation decode_poc0, decode_poc2, decode_poc4, decode_poc6;
+-  {
+-    InSequence decode_order;
+-    decode_poc0 = EXPECT_CALL(*accelerator_, SubmitDecode(WithPoc(0)));
+-    decode_poc2 = EXPECT_CALL(*accelerator_, SubmitDecode(WithPoc(2)));
+-    decode_poc4 = EXPECT_CALL(*accelerator_, SubmitDecode(WithPoc(4)));
+-    decode_poc6 = EXPECT_CALL(*accelerator_, SubmitDecode(WithPoc(6)));
+-  }
+-  {
+-    InSequence display_order;
+-    EXPECT_CALL(*accelerator_, OutputPicture(WithPoc(0))).After(decode_poc0);
+-    EXPECT_CALL(*accelerator_, OutputPicture(WithPoc(2))).After(decode_poc2);
+-    EXPECT_CALL(*accelerator_, OutputPicture(WithPoc(4))).After(decode_poc4);
+-    EXPECT_CALL(*accelerator_, OutputPicture(WithPoc(6))).After(decode_poc6);
+-  }
+-  ASSERT_EQ(AcceleratedVideoDecoder::kRanOutOfStreamData, Decode());
+-  ASSERT_TRUE(decoder_->Flush());
+-}
+-
+-TEST_F(H264DecoderTest, SwitchYUV420ToNonYUV420) {
+-  SetInputFrameFiles({kBaselineFrame0, kYUV444Frame});
+-  // The first frame, YUV420, is decoded with no error.
+-  ASSERT_EQ(AcceleratedVideoDecoder::kConfigChange, Decode());
+-  EXPECT_EQ(gfx::Size(320, 192), decoder_->GetPicSize());
+-  EXPECT_EQ(H264PROFILE_BASELINE, decoder_->GetProfile());
+-  EXPECT_LE(9u, decoder_->GetRequiredNumOfPictures());
+-  {
+-    InSequence sequence;
+-    EXPECT_CALL(*accelerator_, CreateH264Picture());
+-    EXPECT_CALL(*accelerator_, SubmitFrameMetadata(_, _, _, _, _, _, _));
+-    EXPECT_CALL(*accelerator_, SubmitSlice(_, _, _, _, _, _, _, _));
+-    EXPECT_CALL(*accelerator_, SubmitDecode(_));
+-    EXPECT_CALL(*accelerator_, OutputPicture(WithPoc(0)));
+-  }
+-  // The second frame, YUV444, causes kDecodeError.
+-  ASSERT_EQ(AcceleratedVideoDecoder::kDecodeError, Decode());
+-}
+-
+-// Verify that the decryption config is passed to the accelerator.
+-TEST_F(H264DecoderTest, SetEncryptedStream) {
+-  std::string bitstream;
+-  auto input_file = GetTestDataFilePath(kBaselineFrame0);
+-  CHECK(base::ReadFileToString(input_file, &bitstream));
+-
+-  const char kAnyKeyId[] = "any_16byte_keyid";
+-  const char kAnyIv[] = "any_16byte_iv___";
+-  const std::vector<SubsampleEntry> subsamples = {
+-      // No encrypted bytes. This test only checks whether the data is passed
+-      // thru to the acclerator so making this completely clear.
+-      {static_cast<uint32_t>(bitstream.size()), 0},
+-  };
+-
+-  std::unique_ptr<DecryptConfig> decrypt_config =
+-      DecryptConfig::CreateCencConfig(kAnyKeyId, kAnyIv, subsamples);
+-  EXPECT_CALL(*accelerator_,
+-              SubmitFrameMetadata(_, _, _, _, _, _,
+-                                  DecryptConfigMatches(decrypt_config.get())))
+-      .WillOnce(Return(H264Decoder::H264Accelerator::Status::kOk));
+-  EXPECT_CALL(*accelerator_,
+-              SubmitDecode(DecryptConfigMatches(decrypt_config.get())))
+-      .WillOnce(Return(H264Decoder::H264Accelerator::Status::kOk));
+-
+-  decoder_buffers_.push_back(
+-      DecoderBuffer::CopyFrom(base::as_byte_span(bitstream)));
+-  ASSERT_NE(decoder_buffers_.back().get(), nullptr);
+-  decoder_buffers_.back()->set_decrypt_config(std::move(decrypt_config));
+-  decoder_->SetStream(0, decoder_buffers_.back());
+-  EXPECT_EQ(AcceleratedVideoDecoder::kConfigChange, decoder_->Decode());
+-  EXPECT_EQ(H264PROFILE_BASELINE, decoder_->GetProfile());
+-  EXPECT_EQ(8u, decoder_->GetBitDepth());
+-  EXPECT_EQ(AcceleratedVideoDecoder::kRanOutOfStreamData, decoder_->Decode());
+-  EXPECT_TRUE(decoder_->Flush());
+-}
+-
+-TEST_F(H264DecoderTest, ParseEncryptedSliceHeaderRetry) {
+-  SetInputFrameFiles({kBaselineFrame0});
+-  ASSERT_EQ(AcceleratedVideoDecoder::kConfigChange, Decode(true));
+-  EXPECT_EQ(gfx::Size(320, 192), decoder_->GetPicSize());
+-  EXPECT_EQ(H264PROFILE_BASELINE, decoder_->GetProfile());
+-  EXPECT_LE(9u, decoder_->GetRequiredNumOfPictures());
+-
+-  EXPECT_CALL(*accelerator_, ParseEncryptedSliceHeader(_, _, _, _))
+-      .WillOnce(Return(H264Decoder::H264Accelerator::Status::kTryAgain));
+-  ASSERT_EQ(AcceleratedVideoDecoder::kTryAgain, Decode(true));
+-
+-  // Try again, assuming key still not set. Only ParseEncryptedSliceHeader()
+-  // should be called again.
+-  EXPECT_CALL(*accelerator_, ParseEncryptedSliceHeader(_, _, _, _))
+-      .WillOnce(Return(H264Decoder::H264Accelerator::Status::kTryAgain));
+-  ASSERT_EQ(AcceleratedVideoDecoder::kTryAgain, Decode(true));
+-
+-  // Assume key has been provided now, next call to Decode() should proceed.
+-  {
+-    InSequence sequence;
+-    EXPECT_CALL(*accelerator_, ParseEncryptedSliceHeader(_, _, _, _))
+-        .WillOnce([this](const std::vector<base::span<const uint8_t>>& data,
+-                         const std::vector<SubsampleEntry>& subsamples,
+-                         uint64_t /*secure_handle*/,
+-                         H264SliceHeader* slice_hdr_out) {
+-          return ParseSliceHeader(
+-              data, subsamples, accelerator_->last_sps_nalu_data,
+-              accelerator_->last_pps_nalu_data, slice_hdr_out);
+-        });
+-    EXPECT_CALL(*accelerator_, CreateH264Picture());
+-    EXPECT_CALL(*accelerator_, SubmitFrameMetadata(_, _, _, _, _, _, _));
+-    EXPECT_CALL(*accelerator_, SubmitSlice(_, _, _, _, _, _, _, _));
+-    EXPECT_CALL(*accelerator_, SubmitDecode(WithPoc(0)));
+-    EXPECT_CALL(*accelerator_, OutputPicture(WithPoc(0)));
+-  }
+-  ASSERT_EQ(AcceleratedVideoDecoder::kRanOutOfStreamData, Decode(true));
+-
+-  ASSERT_TRUE(decoder_->Flush());
+ }
+ 
+-TEST_F(H264DecoderTest, SubmitFrameMetadataRetry) {
+-  SetInputFrameFiles({kBaselineFrame0});
+-  ASSERT_EQ(AcceleratedVideoDecoder::kConfigChange, Decode());
+-  EXPECT_EQ(gfx::Size(320, 192), decoder_->GetPicSize());
+-  EXPECT_EQ(H264PROFILE_BASELINE, decoder_->GetProfile());
+-  EXPECT_EQ(8u, decoder_->GetBitDepth());
+-  EXPECT_LE(9u, decoder_->GetRequiredNumOfPictures());
+-
+-  {
+-    InSequence sequence;
+-    EXPECT_CALL(*accelerator_, CreateH264Picture());
+-    EXPECT_CALL(*accelerator_, SubmitFrameMetadata(_, _, _, _, _, _, _))
+-        .WillOnce(Return(H264Decoder::H264Accelerator::Status::kTryAgain));
+-  }
+-  ASSERT_EQ(AcceleratedVideoDecoder::kTryAgain, Decode());
+-
+-  // Try again, assuming key still not set. Only SubmitFrameMetadata()
+-  // should be called again.
+-  EXPECT_CALL(*accelerator_, CreateH264Picture()).Times(0);
+-  EXPECT_CALL(*accelerator_, SubmitFrameMetadata(_, _, _, _, _, _, _))
+-      .WillOnce(Return(H264Decoder::H264Accelerator::Status::kTryAgain));
+-  ASSERT_EQ(AcceleratedVideoDecoder::kTryAgain, Decode());
+-
+-  // Assume key has been provided now, next call to Decode() should proceed.
+-  {
+-    InSequence sequence;
+-    EXPECT_CALL(*accelerator_, SubmitFrameMetadata(_, _, _, _, _, _, _));
+-    EXPECT_CALL(*accelerator_, SubmitSlice(_, _, _, _, _, _, _, _));
+-    EXPECT_CALL(*accelerator_, SubmitDecode(WithPoc(0)));
+-    EXPECT_CALL(*accelerator_, OutputPicture(WithPoc(0)));
+-  }
+-  ASSERT_EQ(AcceleratedVideoDecoder::kRanOutOfStreamData, Decode());
+-
+-  ASSERT_TRUE(decoder_->Flush());
+-}
+-
+-TEST_F(H264DecoderTest, SubmitSliceRetry) {
+-  SetInputFrameFiles({kBaselineFrame0});
+-  ASSERT_EQ(AcceleratedVideoDecoder::kConfigChange, Decode());
+-  EXPECT_EQ(gfx::Size(320, 192), decoder_->GetPicSize());
+-  EXPECT_EQ(H264PROFILE_BASELINE, decoder_->GetProfile());
+-  EXPECT_EQ(8u, decoder_->GetBitDepth());
+-  EXPECT_LE(9u, decoder_->GetRequiredNumOfPictures());
+-
+-  {
+-    InSequence sequence;
+-    EXPECT_CALL(*accelerator_, CreateH264Picture());
+-    EXPECT_CALL(*accelerator_, SubmitFrameMetadata(_, _, _, _, _, _, _));
+-    EXPECT_CALL(*accelerator_, SubmitSlice(_, _, _, _, _, _, _, _))
+-        .WillOnce(Return(H264Decoder::H264Accelerator::Status::kTryAgain));
+-  }
+-  ASSERT_EQ(AcceleratedVideoDecoder::kTryAgain, Decode());
+-
+-  // Try again, assuming key still not set. Only SubmitSlice() should be
+-  // called again.
+-  EXPECT_CALL(*accelerator_, CreateH264Picture()).Times(0);
+-  EXPECT_CALL(*accelerator_, SubmitFrameMetadata(_, _, _, _, _, _, _)).Times(0);
+-  EXPECT_CALL(*accelerator_, SubmitSlice(_, _, _, _, _, _, _, _))
+-      .WillOnce(Return(H264Decoder::H264Accelerator::Status::kTryAgain));
+-  ASSERT_EQ(AcceleratedVideoDecoder::kTryAgain, Decode());
++// Custom H264Picture subclass for testing, allowing us to set
++// long_term_pic_num.
++class TestH264Picture : public H264Picture {
++ public:
++  TestH264Picture(int long_term_pic_num)
++      : long_term_pic_num_(long_term_pic_num) {}
+ 
+-  // Assume key has been provided now, next call to Decode() should proceed.
+-  {
+-    InSequence sequence;
+-    EXPECT_CALL(*accelerator_, SubmitSlice(_, _, _, _, _, _, _, _));
+-    EXPECT_CALL(*accelerator_, SubmitDecode(WithPoc(0)));
+-    EXPECT_CALL(*accelerator_, OutputPicture(WithPoc(0)));
++  // H264Picture implementation.
++  PictureBuffer::TextureUsage Get
++      : "Return the texture usage."() const override {
++    return PictureBuffer::TextureUsage::DEFAULT;
+   }
+-  ASSERT_EQ(AcceleratedVideoDecoder::kRanOutOfStreamData, Decode());
+-  ASSERT_TRUE(decoder_->Flush());
+-}
++  gfx::Size size() const override { return gfx::Size(1, 1); }
++  bool AllowOverlay() const override { return false; }
++  int long_term_pic_num() const override { return long_term_pic_num_; }
+ 
+-TEST_F(H264DecoderTest, SubmitDecodeRetry) {
+-  SetInputFrameFiles({kBaselineFrame0, kBaselineFrame1});
+-  ASSERT_EQ(AcceleratedVideoDecoder::kConfigChange, Decode());
+-  EXPECT_EQ(gfx::Size(320, 192), decoder_->GetPicSize());
+-  EXPECT_EQ(H264PROFILE_BASELINE, decoder_->GetProfile());
+-  EXPECT_EQ(8u, decoder_->GetBitDepth());
+-  EXPECT_LE(9u, decoder_->GetRequiredNumOfPictures());
++ private:
++  ~TestH264Picture() override = default;
++  int long_term_pic_num_;
++};
+ 
+-  {
+-    InSequence sequence;
+-    EXPECT_CALL(*accelerator_, CreateH264Picture());
+-    EXPECT_CALL(*accelerator_, SubmitFrameMetadata(_, _, _, _, _, _, _));
+-    EXPECT_CALL(*accelerator_, SubmitSlice(_, _, _, _, _, _, _, _));
+-    EXPECT_CALL(*accelerator_, SubmitDecode(_))
+-        .WillOnce(Return(H264Decoder::H264Accelerator::Status::kTryAgain));
+-  }
+-  ASSERT_EQ(AcceleratedVideoDecoder::kTryAgain, Decode());
+-
+-  // Try again, assuming key still not set. Only SubmitDecode() should be
+-  // called again.
+-  EXPECT_CALL(*accelerator_, CreateH264Picture()).Times(0);
+-  EXPECT_CALL(*accelerator_, SubmitFrameMetadata(_, _, _, _, _, _, _)).Times(0);
+-  EXPECT_CALL(*accelerator_, SubmitSlice(_, _, _, _, _, _, _, _)).Times(0);
+-  EXPECT_CALL(*accelerator_, SubmitDecode(_))
+-      .WillOnce(Return(H264Decoder::H264Accelerator::Status::kTryAgain));
+-  ASSERT_EQ(AcceleratedVideoDecoder::kTryAgain, Decode());
+-
+-  // Assume key has been provided now, next call to Decode() should output
+-  // the first frame.
+-  {
+-    InSequence sequence;
+-    EXPECT_CALL(*accelerator_, SubmitDecode(WithPoc(0)));
+-    EXPECT_CALL(*accelerator_, OutputPicture(WithPoc(0)));
+-    EXPECT_CALL(*accelerator_, CreateH264Picture());
+-    EXPECT_CALL(*accelerator_, SubmitFrameMetadata(_, _, _, _, _, _, _));
+-    EXPECT_CALL(*accelerator_, SubmitSlice(_, _, _, _, _, _, _, _));
+-    EXPECT_CALL(*accelerator_, SubmitDecode(WithPoc(2)));
+-    EXPECT_CALL(*accelerator_, OutputPicture(WithPoc(2)));
+-  }
+-  ASSERT_EQ(AcceleratedVideoDecoder::kRanOutOfStreamData, Decode());
+-  ASSERT_TRUE(decoder_->Flush());
++TEST_F(H264DecoderTest, ModifyReferencePicList_CompactionWithNullEntry) {
++  H264DPB dpb;
++  H264Picture::Vector ref_pic_list0;
++
++  // Initial list: {pic1(lt_num=10), null, pic2(lt_num=12)}
++  ref_pic_list0.push_back(base::MakeRefCounted<TestH264Picture>(10));
++  ref_pic_list0.push_back(nullptr);
++  ref_pic_list0.push_back(base::MakeRefCounted<TestH264Picture>(12));
++  ref_pic_list0.push_back(base::MakeRefCounted<TestH264Picture>(13));
++
++  H264SliceHeader slice_hdr;
++  slice_hdr.num_ref_idx_l0_active_minus1 = 3;  // List size 4
++
++  // Case 2: modification_of_pic_nums_idc = 3
++  // Insert pic3(lt_num=11) at ref_idx_l0 = 1.
++  // The original bug would fail to compact if the entry at index 1 was null or
++  // had the same long_term_pic_num as the inserted picture.
++  H264SliceHeader::ReferencePictureListModification mod;
++  mod.modification_of_pic_nums_idc = 3;
++  mod.long_term_pic_num = 11;
++
++  // Prepare a temporary list for modification, as ModifyReferencePicList
++  // modifies in place.
++  H264Picture::Vector temp_ref_pic_list0 = ref_pic_list0;
++
++  // Insert a new picture at ref_idx_l0 = 1.
++  decoder_->ShiftRightAndInsert(temp_ref_pic_list0, 1,
++                                base::MakeRefCounted<TestH264Picture>(11),
++                                slice_hdr.num_ref_idx_l0_active_minus1 + 1);
++
++  // Before compaction, the list should be: {pic1(10), pic3(11), null, pic2(12),
++  // pic4(13)} The size is num_ref_idx_l0_active_minus1 + 2 = 3+2 = 5
++  ASSERT_EQ(temp_ref_pic_list0.size(), 5u);
++  ASSERT_EQ(temp_ref_pic_list0[0]->long_term_pic_num(), 10);
++  ASSERT_EQ(temp_ref_pic_list0[1]->long_term_pic_num(), 11);
++  ASSERT_EQ(temp_ref_pic_list0[2], nullptr);
++  ASSERT_EQ(temp_ref_pic_list0[3]->long_term_pic_num(), 12);
++  ASSERT_EQ(temp_ref_pic_list0[4]->long_term_pic_num(), 13);
++
++  // Call ModifyReferencePicList.
++  // The goal is to compact the list, removing duplicates of long_term_pic_num =
++  // 11, and nullptrs. In this scenario, there are no duplicates of 11, but
++  // there is a nullptr. The loop should correctly handle the nullptr at
++  // index 2. The original bug condition `if (picptr && ...)` would skip the
++  // nullptr, leading to incorrect compaction. The corrected `if (!picptr ||
++  // ...)` will correctly process it. After modification, the list should
++  // compact and remove the nullptr. {pic1(10), pic3(11), pic2(12), pic4(13)} --
++  // size 4
++  ASSERT_TRUE(decoder_->ModifyReferencePicList(
++      &slice_hdr, &dpb, &temp_ref_pic_list0, &temp_ref_pic_list0, 0, &mod));
++
++  // Verify the compacted list.
++  ASSERT_EQ(temp_ref_pic_list0.size(), 4u);
++  EXPECT_EQ(temp_ref_pic_list0[0]->long_term_pic_num(), 10);
++  EXPECT_EQ(temp_ref_pic_list0[1]->long_term_pic_num(), 11);
++  EXPECT_EQ(temp_ref_pic_list0[2]->long_term_pic_num(), 12);
++  EXPECT_EQ(temp_ref_pic_list0[3]->long_term_pic_num(), 13);
+ }
+ 
+-TEST_F(H264DecoderTest, SetStreamRetry) {
+-  SetInputFrameFiles({kBaselineFrame0});
+-
+-  EXPECT_CALL(*accelerator_, SetStream(_, _))
+-      .WillOnce(Return(H264Decoder::H264Accelerator::Status::kTryAgain))
+-      .WillOnce(Return(H264Decoder::H264Accelerator::Status::kOk));
+-  ASSERT_EQ(AcceleratedVideoDecoder::kTryAgain, Decode());
+-
+-  ASSERT_EQ(AcceleratedVideoDecoder::kConfigChange, Decode());
+-  EXPECT_EQ(gfx::Size(320, 192), decoder_->GetPicSize());
+-  EXPECT_EQ(H264PROFILE_BASELINE, decoder_->GetProfile());
+-  EXPECT_EQ(8u, decoder_->GetBitDepth());
+-  EXPECT_LE(9u, decoder_->GetRequiredNumOfPictures());
+-
+-  {
+-    InSequence sequence;
+-
+-    EXPECT_CALL(*accelerator_, CreateH264Picture());
+-    EXPECT_CALL(*accelerator_, SubmitFrameMetadata(_, _, _, _, _, _, _));
+-    EXPECT_CALL(*accelerator_, SubmitSlice(_, _, _, _, _, _, _, _));
+-    EXPECT_CALL(*accelerator_, SubmitDecode(WithPoc(0)));
+-    EXPECT_CALL(*accelerator_, OutputPicture(WithPoc(0)));
+-  }
+-  ASSERT_EQ(AcceleratedVideoDecoder::kRanOutOfStreamData, Decode());
+-  ASSERT_TRUE(decoder_->Flush());
++TEST_F(H264DecoderTest,
++       ModifyReferencePicList_CompactionWithMatchingLongTermPicNum) {
++  H264DPB dpb;
++  H264Picture::Vector ref_pic_list0;
++
++  // Initial list: {pic1(lt_num=10), pic2(lt_num=11), pic3(lt_num=12)}
++  ref_pic_list0.push_back(base::MakeRefCounted<TestH264Picture>(10));
++  ref_pic_list0.push_back(base::MakeRefCounted<TestH264Picture>(11));
++  ref_pic_list0.push_back(base::MakeRefCounted<TestH264Picture>(12));
++  ref_pic_list0.push_back(base::MakeRefCounted<TestH264Picture>(13));
++
++  H264SliceHeader slice_hdr;
++  slice_hdr.num_ref_idx_l0_active_minus1 = 3;  // List size 4
++
++  // Case 2: modification_of_pic_nums_idc = 3
++  // Insert pic4(lt_num=11) at ref_idx_l0 = 0.
++  // This will create a duplicate of long_term_pic_num = 11.
++  H264SliceHeader::ReferencePictureListModification mod;
++  mod.modification_of_pic_nums_idc = 3;
++  mod.long_term_pic_num = 11;
++
++  // Prepare a temporary list for modification.
++  H264Picture::Vector temp_ref_pic_list0 = ref_pic_list0;
++
++  // Insert new_pic(lt_num=11) at ref_idx_l0 = 0.
++  decoder_->ShiftRightAndInsert(temp_ref_pic_list0, 0,
++                                base::MakeRefCounted<TestH264Picture>(11),
++                                slice_hdr.num_ref_idx_l0_active_minus1 + 1);
++
++  // Before compaction, the list should be: {new_pic(11), pic1(10), pic2(11),
++  // pic3(12), pic4(13)}
++  ASSERT_EQ(temp_ref_pic_list0.size(), 5u);
++  ASSERT_EQ(temp_ref_pic_list0[0]->long_term_pic_num(), 11);
++  ASSERT_EQ(temp_ref_pic_list0[1]->long_term_pic_num(), 10);
++  ASSERT_EQ(temp_ref_pic_list0[2]->long_term_pic_num(), 11);  // Duplicate
++  ASSERT_EQ(temp_ref_pic_list0[3]->long_term_pic_num(), 12);
++  ASSERT_EQ(temp_ref_pic_list0[4]->long_term_pic_num(), 13);
++
++  // Call ModifyReferencePicList.
++  // It should compact the list, removing the duplicate long_term_pic_num = 11.
++  // The loop should correctly identify and remove the duplicate at index 2.
++  // After modification, the list should be: {new_pic(11), pic1(10), pic3(12),
++  // pic4(13)}
++  ASSERT_TRUE(decoder_->ModifyReferencePicList(
++      &slice_hdr, &dpb, &temp_ref_pic_list0, &temp_ref_pic_list0, 0, &mod));
++
++  // Verify the compacted list.
++  ASSERT_EQ(temp_ref_pic_list0.size(), 4u);
++  EXPECT_EQ(temp_ref_pic_list0[0]->long_term_pic_num(), 11);
++  EXPECT_EQ(temp_ref_pic_list0[1]->long_term_pic_num(), 10);
++  EXPECT_EQ(temp_ref_pic_list0[2]->long_term_pic_num(), 12);
++  EXPECT_EQ(temp_ref_pic_list0[3]->long_term_pic_num(), 13);
+ }
+ 
+ }  // namespace

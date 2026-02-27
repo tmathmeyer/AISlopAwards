@@ -1,0 +1,1 @@
+I need you to help me write a unit test for the file /chromium/src/media/gpu/h264_decoder.cc. I made a change, which you can see by running `git show`. The commit message has a description of why I made the change. The tests are located in /chromium/src/media/gpu/h264_decoder_unittest.cc. Built the code with 'autoninja -C out/Release media_unittests'
