@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+import os
+import sys
+import subprocess
+import json
+from datetime import datetime
+
+def get_tty_input(prompt_msg):
+    """Try to get input from /dev/tty if it's a TTY, otherwise fallback to stdin."""
+    print(prompt_msg, end="", flush=True)
+    if sys.stdin.isatty():
+        try:
+            with open('/dev/tty', 'r') as tty:
+                return tty.readline().strip()
+        except Exception:
+            pass
+
+    try:
+        return sys.stdin.readline().strip()
+    except EOFError:
+        return ""
+
+def main():
+    # 1. Get the AISlopAwards repo root (where this script is located)
+    repo_root = os.path.dirname(os.path.realpath(__file__))
+    fuckups_dir = os.path.join(repo_root, "fuckups")
+
+    if not os.path.isdir(fuckups_dir):
+        print(f"Error: {fuckups_dir} not found. Is the script in the AISlopAwards root?")
+        sys.exit(1)
+
+    # 2. Get the current diff from the CWD
+    try:
+        # git diff HEAD captures both staged and unstaged changes
+        patch = subprocess.check_output(["git", "diff", "HEAD"], text=True)
+    except subprocess.CalledProcessError:
+        print("Error: Could not get git diff. Are you inside a git repository?")
+        sys.exit(1)
+    except FileNotFoundError:
+        print("Error: git command not found.")
+        sys.exit(1)
+
+    if not patch.strip():
+        print("No changes detected in the current repository.")
+        sys.exit(1)
+
+    # 3. Prompt for the LLM model ID
+    model_id = get_tty_input("Enter the LLM model ID: ")
+    if not model_id:
+        print("\nError: Model ID is required.")
+        sys.exit(1)
+
+    # 4. Prompt for the LLM prompt
+    print("Enter the prompt that was given to the LLM (press Ctrl-D when finished):")
+    prompt_lines = []
+
+    # If stdin is not a TTY, we might have already read some lines from model_id prompt
+    # but input() should work fine.
+
+    while True:
+        try:
+            line = input()
+            prompt_lines.append(line)
+        except EOFError:
+            break
+    prompt_text = "\n".join(prompt_lines).strip()
+
+    if not prompt_text:
+        print("Error: Prompt text is required.")
+        sys.exit(1)
+
+    # 5. Create new fuckup entry
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    entry_dir = os.path.join(fuckups_dir, timestamp)
+
+    try:
+        os.makedirs(entry_dir, exist_ok=True)
+
+        with open(os.path.join(entry_dir, "patch.txt"), "w") as f:
+            f.write(patch)
+
+        with open(os.path.join(entry_dir, "prompt.txt"), "w") as f:
+            f.write(prompt_text)
+            f.write("\n")
+
+        with open(os.path.join(entry_dir, "config.json"), "w") as f:
+            json.dump({"model": model_id}, f, indent=2)
+            f.write("\n")
+    except Exception as e:
+        print(f"Error writing fuckup entry: {e}")
+        sys.exit(1)
+
+    # 6. Git operations in the AISlopAwards repo
+    try:
+        print(f"Adding new entry to AISlopAwards at {entry_dir}...")
+        # Only add the specific new directory to avoid staging unrelated changes
+        subprocess.run(["git", "add", entry_dir], cwd=repo_root, check=True)
+        subprocess.run(["git", "commit", "-m", f"Add new fuckup entry: {timestamp}"], cwd=repo_root, check=True)
+        # Check if there's a remote before pushing
+        remotes = subprocess.check_output(["git", "remote"], cwd=repo_root, text=True).strip()
+        if remotes:
+            # Try to push, but don't fail if it fails (e.g. no upstream branch set)
+            push_res = subprocess.run(["git", "push"], cwd=repo_root)
+            if push_res.returncode == 0:
+                print(f"Successfully added and pushed new fuckup entry: {timestamp}")
+            else:
+                print(f"Successfully added new fuckup entry locally: {timestamp} (push failed, possibly no upstream)")
+        else:
+            print(f"Successfully added new fuckup entry locally: {timestamp} (no remote to push to)")
+    except subprocess.CalledProcessError as e:
+        print(f"Error during git operations in AISlopAwards repo: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
