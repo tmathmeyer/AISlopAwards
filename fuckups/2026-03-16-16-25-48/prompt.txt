@@ -1,0 +1,1 @@
+It's better, but there's still weird indentation, weird use of markdown-isms (like double asterisks everywhere), and for some reason you chose to draw a shitty box around existing code? what is the point of that? Maybe do something like put the line numbers before the lines in the "existing code snippit" section, instead of starting with a " - Line XXX:" list item.

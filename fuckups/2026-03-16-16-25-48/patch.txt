@@ -1,0 +1,279 @@
+diff --git a/core/utils.py b/core/utils.py
+index f79d1b0..fc289bd 100644
+--- a/core/utils.py
++++ b/core/utils.py
+@@ -3,6 +3,7 @@ Utility functions for file system operations and context reading.
+ """
+ 
+ import os
++import re
+ from pathlib import Path
+ from typing import List, Optional
+ 
+@@ -62,9 +63,243 @@ def _append_file_content(file_path: Path, contents_list: List[str], max_lines: i
+                 print(f"Skipping {file_path} (more than {max_lines} lines)")
+                 return
+             
+-            file_content = "".join(lines)
+-            contents_list.append(f"--- File: {file_path} ---\n{file_content}\n")
++            formatted_lines = []
++            # Determine the maximum number of digits for line numbers for consistent padding
++            max_line_num_digits = len(str(len(lines)))
++
++            for i, line in enumerate(lines):
++                # Prepend line number with padding, followed by the content
++                formatted_lines.append(f"{i+1:>{max_line_num_digits}} {line.rstrip()}\n")
++            
++            file_content = "".join(formatted_lines)
++            contents_list.append(f"--- File: {file_path} ---\n{file_content}")
+     except UnicodeDecodeError:
+         print(f"Skipping {file_path} (binary or non-UTF-8 content)")
+     except Exception as e:
+         print(f"Skipping {file_path} due to error: {e}")
++
++def format_markdown(text: str) -> str:
++
++    """
++
++    Adds ANSI escape codes and ASCII box drawing characters to text for better readability in the terminal.
++
++    Focuses on clearly delineating comments and coloring code blocks.
++
++    """
++
++    if not text:
++
++        return text
++
++
++
++    # Color for code blocks and inline code
++
++    CODE_COLOR = '\033[96m' # Cyan for inline, will use yellow for blocks
++
++    BLOCK_CODE_COLOR = '\033[93m' # Yellow for blocks
++
++    RESET_COLOR = '\033[0m'
++
++    
++
++    # Color and box characters for comments (blockquotes)
++
++    COMMENT_COLOR = '\033[35m'
++
++    BOX_TOP_LEFT = '┌'
++
++    BOX_HORIZONTAL = '─'
++
++    BOX_VERTICAL = '│'
++
++    BOX_BOTTOM_LEFT = '└'
++
++
++
++    code_blocks = []
++
++    
++
++    def extract_code_block(match):
++
++        # Store the actual code content, not the ``` markers
++
++        code_blocks.append(match.group(1).strip())
++
++        return f"__CODE_BLOCK_{len(code_blocks)-1}__"
++
++
++
++        # Extract code blocks first to prevent markdown inside them from being processed
++
++
++
++        text = re.sub(r'```(?:[^\\n]*\\n)?(.*?)```', extract_code_block, text, flags=re.DOTALL)
++
++
++
++        
++
++
++
++        # Inline code (no backticks, just colored)
++
++
++
++        text = re.sub(r'`([^`\\n]+)`', r' ' + CODE_COLOR + r'\g<1>' + RESET_COLOR + r' ', text)
++
++
++
++    
++
++
++
++        # Process blockquotes/comments with ASCII box drawing characters
++
++
++
++        def format_blockquote(match):
++
++
++
++            full_blockquote_content = match.group(1)
++
++
++
++            lines = full_blockquote_content.strip().split('\\n')
++
++
++
++            
++
++
++
++            cleaned_lines = [line.lstrip('> ') for line in lines]
++
++
++
++    
++
++
++
++            max_line_width = 0
++
++
++
++            if cleaned_lines:
++
++
++
++                max_line_width = max(len(line) for line in cleaned_lines)
++
++
++
++            
++
++
++
++            box_width = max_line_width + 2
++
++
++
++            min_box_width = 5
++
++
++
++            if box_width < min_box_width:
++
++
++
++                box_width = min_box_width
++
++
++
++    
++
++
++
++            header = f"{COMMENT_COLOR}{BOX_TOP_LEFT}{BOX_HORIZONTAL * (box_width + 2)}{RESET_COLOR}\\n"
++
++
++
++            formatted_lines = [f"{COMMENT_COLOR}{BOX_VERTICAL} {line:<{box_width}} {BOX_VERTICAL}{RESET_COLOR}" for line in cleaned_lines]
++
++
++
++            footer = f"{COMMENT_COLOR}{BOX_BOTTOM_LEFT}{BOX_HORIZONTAL * (box_width + 2)}{RESET_COLOR}\\n"
++
++
++
++            
++
++
++
++            return f"\\n{header}{'\\n'.join(formatted_lines)}\\n{footer}"
++
++
++
++    
++
++
++
++        # Apply blockquote formatting
++
++
++
++        text = re.sub(r'(^>.*(?:\\n>.*)*)', format_blockquote, text, flags=re.MULTILINE)
++
++
++
++    
++
++
++
++        # Restore code blocks with yellow coloring (no box)
++
++
++
++        def restore_code_block(match):
++
++
++
++            idx = int(match.group(1))
++
++
++
++            code_content = code_blocks[idx]
++
++
++
++            return f"\\n\\n{BLOCK_CODE_COLOR}{code_content}{RESET_COLOR}\\n\\n"
++
++
++
++            
++
++
++
++        text = re.sub(r'__CODE_BLOCK_(\\d+)__', restore_code_block, text)
++
++
++
++        
++
++
++
++        # Final cleanup of excessive newlines
++
++
++
++        text = re.sub(r'\\n{3,}', '\\n\\n', text)
++
++
++
++        
++
++
++
++        return text.strip()
++
++
+diff --git a/main.py b/main.py
+index 45bc37b..28d6b88 100644
+--- a/main.py
++++ b/main.py
+@@ -16,6 +16,7 @@ from core.context_analyzer import analyze_context
+ from core.extra_context_fetcher import fetch_extra_context
+ from core.review_engine import run_review
+ from core.review_summarizer import summarize_reviews
++from core.utils import format_markdown
+ 
+ def print_header(title: str):
+     print(f"\n{'='*50}")
+@@ -175,7 +176,7 @@ def main():
+         final_summary = summarize_reviews(cl_dir=output_dir, gemini_client=gemini_client, model_name=model_name)
+ 
+         if final_summary:
+-            print(f"\n{final_summary}\n")
++            print(f"\n{format_markdown(final_summary)}\n")
+ 
+         print(f"\n{'+'*50}")
+         print(f"SUCCESS: Pipeline complete!")
